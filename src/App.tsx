@@ -6,7 +6,9 @@ import {
   Layers, 
   RefreshCw, 
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  Files,
+  EyeOff
 } from 'lucide-react'
 
 // Component Imports
@@ -14,14 +16,23 @@ import VideoToGif from './components/VideoToGif'
 import GifMerger from './components/GifMerger'
 import ImagesToGif from './components/ImagesToGif'
 import ImageOptimizer from './components/ImageOptimizer'
+import BatchConverter from './components/BatchConverter'
+import MetadataStripper from './components/MetadataStripper'
 
-type AppTab = 'video-to-gif' | 'gif-merger' | 'images-to-gif' | 'image-optimizer'
+type AppTab = 
+  | 'video-to-gif' 
+  | 'gif-merger' 
+  | 'images-to-gif' 
+  | 'image-optimizer' 
+  | 'batch-converter' 
+  | 'metadata-stripper'
 
 function App() {
   const [loaded, setLoaded] = useState(false)
   const [activeTab, setActiveTab] = useState<AppTab>('video-to-gif')
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
+
   
   const ffmpegRef = useRef<FFmpeg | null>(null)
 
@@ -57,9 +68,10 @@ function App() {
   return (
     <div className="app-container">
       <header className="fade-in">
-        <h1>GIF Studio Pro</h1>
-        <p className="subtitle">Công cụ xử lý GIF tối ưu, chuyển đổi và gộp tệp mượt mà.</p>
+        <h1>Media Studio Pro</h1>
+        <p className="subtitle">Bộ công cụ xử lý đa phương tiện trực quan: Chuyển đổi GIF, Gộp tệp, Tối ưu hóa ảnh, Cắt và Xóa nền.</p>
       </header>
+
 
       <div className="tabs fade-in">
         <button 
@@ -97,6 +109,24 @@ function App() {
         >
           <Sparkles size={18} />
           Tối ưu ảnh
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'batch-converter' ? 'active' : ''}`} 
+          onClick={() => setActiveTab('batch-converter')}
+          disabled={processing}
+          title={processing ? 'Đang xử lý, vui lòng đợi...' : ''}
+        >
+          <Files size={18} />
+          Chuyển đổi hàng loạt
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'metadata-stripper' ? 'active' : ''}`} 
+          onClick={() => setActiveTab('metadata-stripper')}
+          disabled={processing}
+          title={processing ? 'Đang xử lý, vui lòng đợi...' : ''}
+        >
+          <EyeOff size={18} />
+          Xóa EXIF / Metadata
         </button>
       </div>
 
@@ -139,6 +169,26 @@ function App() {
 
           {activeTab === 'image-optimizer' && (
             <ImageOptimizer
+              ffmpegRef={ffmpegRef}
+              processing={processing}
+              setProcessing={setProcessing}
+              progress={progress}
+              setProgress={setProgress}
+            />
+          )}
+
+          {activeTab === 'batch-converter' && (
+            <BatchConverter
+              ffmpegRef={ffmpegRef}
+              processing={processing}
+              setProcessing={setProcessing}
+              progress={progress}
+              setProgress={setProgress}
+            />
+          )}
+
+          {activeTab === 'metadata-stripper' && (
+            <MetadataStripper
               ffmpegRef={ffmpegRef}
               processing={processing}
               setProcessing={setProcessing}

@@ -40,6 +40,7 @@ const ImagesToGif: React.FC<TabComponentProps> = ({
   setProgress
 }) => {
   const [imageFiles, setImageFiles] = useState<MergeFile[]>([])
+  const [isDragging, setIsDragging] = useState(false)
   const [imageSettings, setImageSettings] = useState({
     fps: 2,
     aspectRatio: 'original' as AspectRatio,
@@ -49,12 +50,14 @@ const ImagesToGif: React.FC<TabComponentProps> = ({
   })
   const [resultURL, setResultURL] = useState<string>('')
 
-  const handleImageFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    e.target.value = ''
+  const handleImageFilesChange = async (files: File[]) => {
     if (files.length > 0) {
       const newFiles: MergeFile[] = []
       for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          alert(`Tệp ${file.name} không phải là hình ảnh hợp lệ.`)
+          continue
+        }
         const dim = await getImageDimensions(file)
         newFiles.push({
           file,
@@ -66,6 +69,22 @@ const ImagesToGif: React.FC<TabComponentProps> = ({
       setImageFiles(prev => [...prev, ...newFiles])
       setResultURL('')
     }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files || [])
+    await handleImageFilesChange(files)
   }
 
   const removeImageFile = (id: string) => setImageFiles(prev => prev.filter(f => f.id !== id))
@@ -151,41 +170,64 @@ const ImagesToGif: React.FC<TabComponentProps> = ({
           <ImageIcon size={20} color="var(--accent)" />
           <h3 style={{ margin: 0 }}>Danh sách Ảnh ({imageFiles.length})</h3>
         </div>
-        <div className="file-list">
-          {imageFiles.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>
-              <p>Chưa có tệp nào được chọn</p>
+        
+        {imageFiles.length === 0 ? (
+          <label 
+            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            style={{ minHeight: '280px' }}
+          >
+            <div className="upload-icon-wrapper">
+              <UploadCloud size={48} strokeWidth={1.5} color="var(--accent)" />
             </div>
-          ) : (
-            imageFiles.map((f, i) => (
-              <div key={f.id} className="file-item">
-                <div className="file-info">
-                  <div className="file-name">{f.file.name}</div>
-                  <div className="file-meta">
-                    <Info size={12} style={{ marginRight: '4px' }} />
-                    {f.width}x{f.height} • {(f.file.size/1024).toFixed(0)} KB
+            <div style={{ marginTop: '1rem' }}>
+              <h3>Chọn các hình ảnh</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>Hoặc kéo thả nhiều ảnh vào đây</p>
+            </div>
+            <input type="file" accept="image/*" multiple onChange={(e) => handleImageFilesChange(Array.from(e.target.files || []))} style={{ display: 'none' }} />
+          </label>
+        ) : (
+          <div>
+            <div className="file-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+              {imageFiles.map((f, i) => (
+                <div key={f.id} className="file-item">
+                  <div className="file-info">
+                    <div className="file-name">{f.file.name}</div>
+                    <div className="file-meta">
+                      <Info size={12} style={{ marginRight: '4px' }} />
+                      {f.width}x{f.height} • {(f.file.size/1024).toFixed(0)} KB
+                    </div>
+                  </div>
+                  <div className="file-actions">
+                    <button className="action-btn" onClick={() => moveImageFile(i, 'up')} disabled={i === 0} title="Di chuyển lên">
+                      <ChevronUp size={16} />
+                    </button>
+                    <button className="action-btn" onClick={() => moveImageFile(i, 'down')} disabled={i === imageFiles.length - 1} title="Di chuyển xuống">
+                      <ChevronDown size={16} />
+                    </button>
+                    <button className="action-btn delete" onClick={() => removeImageFile(f.id)} title="Xóa">
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
-                <div className="file-actions">
-                  <button className="action-btn" onClick={() => moveImageFile(i, 'up')} disabled={i === 0} title="Di chuyển lên">
-                    <ChevronUp size={16} />
-                  </button>
-                  <button className="action-btn" onClick={() => moveImageFile(i, 'down')} disabled={i === imageFiles.length - 1} title="Di chuyển xuống">
-                    <ChevronDown size={16} />
-                  </button>
-                  <button className="action-btn delete" onClick={() => removeImageFile(f.id)} title="Xóa">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <label className="button button-secondary" style={{ width: '100%', marginTop: '1.5rem', cursor: 'pointer' }}>
-          <UploadCloud size={18} />
-          Thêm ảnh (JPG, PNG...)
-          <input type="file" accept="image/*" multiple onChange={handleImageFilesChange} style={{ display: 'none' }} />
-        </label>
+              ))}
+            </div>
+
+            <label 
+              className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{ padding: '1.5rem', minHeight: 'auto', borderStyle: 'dashed', marginTop: '1.5rem' }}
+            >
+              <UploadCloud size={24} color="var(--accent)" />
+              <span>Thêm ảnh hoặc kéo thả thêm tệp vào đây</span>
+              <input type="file" accept="image/*" multiple onChange={(e) => handleImageFilesChange(Array.from(e.target.files || []))} style={{ display: 'none' }} />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="card controls-panel">

@@ -189,6 +189,22 @@ input:focus, select:focus {
   border-color: var(--accent);
 }
 
+/* Custom styling for range sliders to fix padding/border gap issues */
+input[type="range"] {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  height: 24px;
+  cursor: pointer;
+  accent-color: var(--accent-light); /* Khớp màu tím neon của hệ thống */
+}
+
+input[type="range"]:focus {
+  outline: none;
+  border: none !important;
+}
+
+
 /* Progress Bar */
 .progress-container {
   width: 100%;
@@ -456,4 +472,141 @@ video {
   font-size: 1.1rem;
   font-weight: 700;
 }
+
+/* Drag & Drop Hover States */
+.upload-zone.dragging {
+  border-color: var(--accent-light) !important;
+  background: rgba(109, 40, 217, 0.12) !important;
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 15px 30px -10px rgba(109, 40, 217, 0.5) !important;
+}
+
+.upload-zone.dragging * {
+  pointer-events: none; /* Tránh nhiễu sự kiện dragover giữa các phần tử con */
+}
+
+/* Crop Modal & Image Tools */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.modal-content {
+  background: #131316;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  width: 90%;
+  max-width: 650px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.crop-area-wrapper {
+  max-height: 380px;
+  overflow: auto;
+  background: #000;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 1rem;
+}
+
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.preset-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.preset-btn.active {
+  background: var(--accent);
+  border-color: var(--accent-light);
+  color: white;
+}
+
+/* Tool Buttons below original preview */
+.image-tools-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.tool-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  padding: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tool-btn:hover {
+  background: rgba(109, 40, 217, 0.1);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+.tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tool-btn.primary-tool {
+  background: rgba(109, 40, 217, 0.15);
+  border-color: rgba(109, 40, 217, 0.3);
+}
+
+.tool-btn.primary-tool:hover {
+  background: rgba(109, 40, 217, 0.25);
+  border-color: var(--accent-light);
+}
+
 

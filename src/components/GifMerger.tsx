@@ -40,6 +40,7 @@ const GifMerger: React.FC<TabComponentProps> = ({
   setProgress
 }) => {
   const [mergeFiles, setMergeFiles] = useState<MergeFile[]>([])
+  const [isDragging, setIsDragging] = useState(false)
   const [mergeSettings, setMergeSettings] = useState({
     aspectRatio: 'original' as AspectRatio,
     fitMode: 'contain' as FitMode,
@@ -48,12 +49,15 @@ const GifMerger: React.FC<TabComponentProps> = ({
   })
   const [resultURL, setResultURL] = useState<string>('')
 
-  const handleMergeFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    e.target.value = ''
+  const handleMergeFilesChange = async (files: File[]) => {
     if (files.length > 0) {
       const newMergeFiles: MergeFile[] = []
       for (const file of files) {
+        const isGif = file.type === 'image/gif' || file.name.endsWith('.gif')
+        if (!isGif) {
+          alert(`Tệp ${file.name} không phải là tệp GIF hợp lệ.`)
+          continue
+        }
         const dim = await getImageDimensions(file)
         newMergeFiles.push({
           file,
@@ -65,6 +69,22 @@ const GifMerger: React.FC<TabComponentProps> = ({
       setMergeFiles(prev => [...prev, ...newMergeFiles])
       setResultURL('')
     }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files || [])
+    await handleMergeFilesChange(files)
   }
 
   const removeMergeFile = (id: string) => setMergeFiles(prev => prev.filter(f => f.id !== id))
@@ -145,41 +165,64 @@ const GifMerger: React.FC<TabComponentProps> = ({
           <Layers size={20} color="var(--accent)" />
           <h3 style={{ margin: 0 }}>Danh sách GIF ({mergeFiles.length})</h3>
         </div>
-        <div className="file-list">
-          {mergeFiles.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>
-              <p>Chưa có tệp nào được chọn</p>
+        
+        {mergeFiles.length === 0 ? (
+          <label 
+            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            style={{ minHeight: '280px' }}
+          >
+            <div className="upload-icon-wrapper">
+              <UploadCloud size={48} strokeWidth={1.5} color="var(--accent)" />
             </div>
-          ) : (
-            mergeFiles.map((f, i) => (
-              <div key={f.id} className="file-item">
-                <div className="file-info">
-                  <div className="file-name">{f.file.name}</div>
-                  <div className="file-meta">
-                    <Info size={12} style={{ marginRight: '4px' }} />
-                    {f.width}x{f.height} • {(f.file.size/1024).toFixed(0)} KB
+            <div style={{ marginTop: '1rem' }}>
+              <h3>Chọn các tệp GIF</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>Hoặc kéo thả nhiều tệp GIF vào đây</p>
+            </div>
+            <input type="file" accept="image/gif" multiple onChange={(e) => handleMergeFilesChange(Array.from(e.target.files || []))} style={{ display: 'none' }} />
+          </label>
+        ) : (
+          <div>
+            <div className="file-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+              {mergeFiles.map((f, i) => (
+                <div key={f.id} className="file-item">
+                  <div className="file-info">
+                    <div className="file-name">{f.file.name}</div>
+                    <div className="file-meta">
+                      <Info size={12} style={{ marginRight: '4px' }} />
+                      {f.width}x{f.height} • {(f.file.size/1024).toFixed(0)} KB
+                    </div>
+                  </div>
+                  <div className="file-actions">
+                    <button className="action-btn" onClick={() => moveMergeFile(i, 'up')} disabled={i === 0} title="Di chuyển lên">
+                      <ChevronUp size={16} />
+                    </button>
+                    <button className="action-btn" onClick={() => moveMergeFile(i, 'down')} disabled={i === mergeFiles.length - 1} title="Di chuyển xuống">
+                      <ChevronDown size={16} />
+                    </button>
+                    <button className="action-btn delete" onClick={() => removeMergeFile(f.id)} title="Xóa">
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
-                <div className="file-actions">
-                  <button className="action-btn" onClick={() => moveMergeFile(i, 'up')} disabled={i === 0} title="Di chuyển lên">
-                    <ChevronUp size={16} />
-                  </button>
-                  <button className="action-btn" onClick={() => moveMergeFile(i, 'down')} disabled={i === mergeFiles.length - 1} title="Di chuyển xuống">
-                    <ChevronDown size={16} />
-                  </button>
-                  <button className="action-btn delete" onClick={() => removeMergeFile(f.id)} title="Xóa">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <label className="button button-secondary" style={{ width: '100%', marginTop: '1.5rem', cursor: 'pointer' }}>
-          <UploadCloud size={18} />
-          Thêm tệp GIF
-          <input type="file" accept="image/gif" multiple onChange={handleMergeFilesChange} style={{ display: 'none' }} />
-        </label>
+              ))}
+            </div>
+
+            <label 
+              className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{ padding: '1.5rem', minHeight: 'auto', borderStyle: 'dashed', marginTop: '1.5rem' }}
+            >
+              <UploadCloud size={24} color="var(--accent)" />
+              <span>Thêm GIF hoặc kéo thả thêm tệp vào đây</span>
+              <input type="file" accept="image/gif" multiple onChange={(e) => handleMergeFilesChange(Array.from(e.target.files || []))} style={{ display: 'none' }} />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="card controls-panel">

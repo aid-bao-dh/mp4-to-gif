@@ -35,6 +35,7 @@ const VideoToGif: React.FC<TabComponentProps> = ({
 }) => {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoURL, setVideoURL] = useState<string>('')
+  const [isDragging, setIsDragging] = useState(false)
   const [settings, setSettings] = useState<VideoSettings>({
     start: 0,
     end: 0,
@@ -45,14 +46,34 @@ const VideoToGif: React.FC<TabComponentProps> = ({
   const [resultURL, setResultURL] = useState<string>('')
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
+  const handleVideoFileChange = (file: File | undefined) => {
     if (file) {
       setVideoFile(file)
       setVideoURL(URL.createObjectURL(file))
       setResultURL('')
       setProgress(0)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      if (file.type === 'video/mp4' || file.name.endsWith('.mp4')) {
+        handleVideoFileChange(file)
+      } else {
+        alert('Vui lòng kéo thả tệp video MP4 hợp lệ.')
+      }
     }
   }
 
@@ -109,7 +130,12 @@ const VideoToGif: React.FC<TabComponentProps> = ({
   return (
     !videoFile ? (
       <div className="card fade-in">
-        <label className="upload-zone">
+        <label 
+          className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <div className="upload-icon-wrapper">
             <UploadCloud size={48} strokeWidth={1.5} color="var(--accent)" />
           </div>
@@ -117,7 +143,7 @@ const VideoToGif: React.FC<TabComponentProps> = ({
             <h3>Chọn video MP4</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>Hoặc kéo thả tệp vào đây</p>
           </div>
-          <input type="file" accept="video/mp4" onChange={handleVideoFileChange} style={{ display: 'none' }} />
+          <input type="file" accept="video/mp4" onChange={(e) => handleVideoFileChange(e.target.files?.[0])} style={{ display: 'none' }} />
         </label>
       </div>
     ) : (

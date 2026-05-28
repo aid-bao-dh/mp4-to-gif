@@ -7,9 +7,16 @@ import {
   Info, 
   CheckCircle2, 
   Sliders,
-  Sparkles
+  Sparkles,
+  Crop,
+  Eraser,
+  Pipette
 } from 'lucide-react'
 import { getImageDimensions } from '../utils/media'
+import CropModal from './CropModal'
+import ColorKeyModal from './ColorKeyModal'
+
+
 
 interface TabComponentProps {
   ffmpegRef: React.MutableRefObject<any>;
@@ -28,6 +35,11 @@ const ImageOptimizer: React.FC<TabComponentProps> = ({
 }) => {
   const [optFile, setOptFile] = useState<File | null>(null)
   const [optURL, setOptURL] = useState<string>('')
+  const [isDragging, setIsDragging] = useState(false)
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false)
+  const [isColorKeyModalOpen, setIsColorKeyModalOpen] = useState(false)
+  const [isBgRemoving, setIsBgRemoving] = useState(false)
+
   const [optDimensions, setOptDimensions] = useState({ width: 0, height: 0 })
   const [optSettings, setOptSettings] = useState({
     scale: 80, // %
@@ -44,9 +56,7 @@ const ImageOptimizer: React.FC<TabComponentProps> = ({
   const isOptFilePng = optFile ? (optFile.type === 'image/png' || optFile.name.endsWith('.png')) : false
   const isOptPngOutput = optFile ? (optSettings.format === 'png' || (optSettings.format === 'original' && isOptFilePng)) : false
 
-  const handleOptFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
+  const handleOptFileChange = async (file: File | undefined) => {
     if (file) {
       setOptFile(file)
       setOptURL(URL.createObjectURL(file))
@@ -58,6 +68,110 @@ const ImageOptimizer: React.FC<TabComponentProps> = ({
       setOptDimensions(dim)
     }
   }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      if (file.type.startsWith('image/')) {
+        await handleOptFileChange(file)
+      } else {
+        alert('Vui lòng kéo thả tệp hình ảnh hợp lệ.')
+      }
+    }
+  }
+
+  const handleCropComplete = async (croppedFile: File) => {
+    setOptFile(croppedFile)
+    setOptURL(URL.createObjectURL(croppedFile))
+    setOptResultURL('')
+    setOptResultSize(0)
+    setProgress(0)
+    
+    const dim = await getImageDimensions(croppedFile)
+    setOptDimensions(dim)
+  }
+
+  const handleColorKeyComplete = async (processedFile: File) => {
+    setOptFile(processedFile)
+    setOptURL(URL.createObjectURL(processedFile))
+    setOptResultURL('')
+    setOptResultSize(0)
+    setProgress(0)
+    
+    setOptSettings(prev => ({
+      ...prev,
+      format: 'png'
+    }))
+    
+    const dim = await getImageDimensions(processedFile)
+    setOptDimensions(dim)
+  }
+
+
+  const handleRemoveBackground = async () => {
+    if (!optFile) return
+    setProcessing(true)
+    setIsBgRemoving(true)
+    setProgress(5)
+    try {
+      // Tải động thư viện xóa nền từ CDN
+      setProgress(10)
+      const cdnUrl = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal/+esm'
+      const module = await import(/* @vite-ignore */ cdnUrl)
+      const removeBgFn = module.default || module.removeBackground
+
+      setProgress(25)
+      // Gọi thư viện xóa nền
+      const blob = await removeBgFn(optFile, {
+        progress: (_key: string, current: number, total: number) => {
+          const p = Math.round((current / total) * 100)
+          setProgress(Math.min(95, 25 + Math.round(p * 0.7)))
+        }
+      })
+
+      setProgress(95)
+      
+      const baseName = optFile.name.substring(0, optFile.name.lastIndexOf('.')) || optFile.name
+      const noBgFile = new File([blob], `${baseName}-no-bg.png`, {
+        type: 'image/png'
+      })
+
+      setOptFile(noBgFile)
+      setOptURL(URL.createObjectURL(noBgFile))
+      
+      // Đặt định dạng đầu ra thành PNG vì ảnh trong suốt cần PNG
+      setOptSettings(prev => ({
+        ...prev,
+        format: 'png'
+      }))
+      
+      setOptResultURL('')
+      setOptResultSize(0)
+      
+      const dim = await getImageDimensions(noBgFile)
+      setOptDimensions(dim)
+      setProgress(100)
+    } catch (err) {
+      console.error('Lỗi khi xóa nền:', err)
+      alert('Không thể xóa nền ảnh. Vui lòng đảm bảo thiết bị của bạn hỗ trợ WebGL và tệp ảnh hợp lệ.')
+    } finally {
+      setProcessing(false)
+      setIsBgRemoving(false)
+    }
+  }
+
+
 
   const optimizeNormalImage = async () => {
     if (!optFile) return
@@ -207,17 +321,23 @@ const ImageOptimizer: React.FC<TabComponentProps> = ({
         </div>
 
         {!optFile ? (
-          <label className="upload-zone" style={{ minHeight: '300px' }}>
+          <label 
+            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            style={{ minHeight: '300px' }}
+          >
             <div className="upload-icon-wrapper">
               <UploadCloud size={48} strokeWidth={1.5} color="var(--accent)" />
             </div>
             <div style={{ marginTop: '1rem' }}>
               <h3>Chọn ảnh gốc (PNG, JPG, WEBP hoặc GIF)</h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                Hỗ trợ nén chất lượng, thay đổi kích thước và giảm dung lượng
+                Hoặc kéo thả hình ảnh vào đây để bắt đầu
               </p>
             </div>
-            <input type="file" accept="image/*" onChange={handleOptFileChange} style={{ display: 'none' }} />
+            <input type="file" accept="image/*" onChange={(e) => handleOptFileChange(e.target.files?.[0])} style={{ display: 'none' }} />
           </label>
         ) : (
           <div>
@@ -228,7 +348,43 @@ const ImageOptimizer: React.FC<TabComponentProps> = ({
                 <div className="preview-img-wrapper">
                   <img src={optURL} alt="Original preview" />
                 </div>
-                <div className="compare-info">
+                
+                {/* Crop & Remove BG buttons */}
+                <div className="image-tools-row">
+                  <button 
+                    type="button"
+                    className="tool-btn" 
+                    onClick={() => setIsCropModalOpen(true)}
+                    disabled={processing}
+                    title="Cắt ảnh"
+                  >
+                    <Crop size={14} />
+                    Cắt ảnh
+                  </button>
+                  <button 
+                    type="button"
+                    className="tool-btn" 
+                    onClick={handleRemoveBackground}
+                    disabled={processing || isOptFileGif}
+                    title={isOptFileGif ? "Không hỗ trợ xóa nền tệp GIF" : "Xóa nền hình ảnh bằng AI"}
+                  >
+                    <Eraser size={14} />
+                    {isBgRemoving ? 'Đang xóa...' : 'Xóa nền AI'}
+                  </button>
+                  <button 
+                    type="button"
+                    className="tool-btn primary-tool" 
+                    onClick={() => setIsColorKeyModalOpen(true)}
+                    disabled={processing || isOptFileGif}
+                    title={isOptFileGif ? "Không hỗ trợ xóa nền tệp GIF" : "Xóa nền đơn sắc của Logo/Icon"}
+                  >
+                    <Pipette size={14} />
+                    Xóa nền Logo
+                  </button>
+                </div>
+
+
+                <div className="compare-info" style={{ marginTop: '0.5rem' }}>
                   <div className="file-name" style={{ maxWidth: '180px' }}>{optFile.name}</div>
                   <div className="compare-size">{(optFile.size / 1024).toFixed(1)} KB</div>
                   <div className="file-meta">{optDimensions.width}x{optDimensions.height}</div>
@@ -512,6 +668,25 @@ const ImageOptimizer: React.FC<TabComponentProps> = ({
           </div>
         )}
       </div>
+
+      {isCropModalOpen && optFile && (
+        <CropModal
+          imageSrc={optURL}
+          fileName={optFile.name}
+          onClose={() => setIsCropModalOpen(false)}
+          onCropComplete={handleCropComplete}
+        />
+      )}
+
+      {isColorKeyModalOpen && optFile && (
+        <ColorKeyModal
+          imageSrc={optURL}
+          fileName={optFile.name}
+          onClose={() => setIsColorKeyModalOpen(false)}
+          onComplete={handleColorKeyComplete}
+        />
+      )}
+
     </div>
   )
 }
