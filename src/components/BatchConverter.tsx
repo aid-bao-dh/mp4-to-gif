@@ -30,6 +30,67 @@ interface ImageFile {
 }
 
 type ConvertFormat = 'webp' | 'jpeg' | 'png'
+type AspectRatioPreset = 'original' | '1:1' | '16:9' | '9:16' | '4:3' | 'custom'
+
+const getConvertedDimensions = (
+  width: number,
+  height: number,
+  settings: {
+    resizeMode: 'scale' | 'fixed'
+    scale: number
+    fixedWidth: number
+    fixedHeight: number
+    aspectRatio: AspectRatioPreset
+    fixedFit: 'crop' | 'stretch'
+  }
+) => {
+  if (settings.resizeMode === 'fixed') {
+    const destW = settings.fixedWidth
+    const destH = settings.fixedHeight
+    
+    if (settings.fixedFit === 'crop') {
+      const targetRatio = destW / destH
+      const currentRatio = width / height
+      let sw = width
+      let sh = height
+      
+      if (currentRatio > targetRatio) {
+        sw = height * targetRatio
+        sh = height
+      } else {
+        sw = width
+        sh = width / targetRatio
+      }
+      return { sw, sh, destW, destH }
+    } else {
+      return { sw: width, sh: height, destW, destH }
+    }
+  } else {
+    let sw = width
+    let sh = height
+    
+    if (settings.aspectRatio !== 'original') {
+      let targetRatio = 1
+      if (settings.aspectRatio === '16:9') targetRatio = 16 / 9
+      else if (settings.aspectRatio === '9:16') targetRatio = 9 / 16
+      else if (settings.aspectRatio === '4:3') targetRatio = 4 / 3
+      
+      const currentRatio = width / height
+      if (currentRatio > targetRatio) {
+        sw = height * targetRatio
+        sh = height
+      } else {
+        sw = width
+        sh = width / targetRatio
+      }
+    }
+    
+    const destW = Math.max(1, Math.floor((sw * settings.scale) / 100))
+    const destH = Math.max(1, Math.floor((sh * settings.scale) / 100))
+    
+    return { sw, sh, destW, destH }
+  }
+}
 
 const BatchConverter: React.FC<TabComponentProps> = ({
   ffmpegRef,
@@ -42,10 +103,46 @@ const BatchConverter: React.FC<TabComponentProps> = ({
   const [isDragging, setIsDragging] = useState(false)
   const [settings, setSettings] = useState({
     format: 'webp' as ConvertFormat,
-    quality: 80 // for webp and jpeg
+    quality: 80, // for webp and jpeg
+    resizeMode: 'scale' as 'scale' | 'fixed',
+    scale: 100, // %
+    fixedWidth: 800,
+    fixedHeight: 800,
+    aspectRatio: 'original' as AspectRatioPreset,
+    fixedFit: 'crop' as 'crop' | 'stretch'
   })
   const [zipURL, setZipURL] = useState<string>('')
   const [zipSize, setZipSize] = useState<number>(0)
+
+  const calculateHeightFromWidth = (width: number, ratio: string): number => {
+    if (ratio === '1:1') return width
+    if (ratio === '16:9') return Math.round(width * 9 / 16)
+    if (ratio === '9:16') return Math.round(width * 16 / 9)
+    if (ratio === '4:3') return Math.round(width * 3 / 4)
+    return width
+  }
+
+  const handleWidthChange = (w: number) => {
+    setSettings(p => {
+      const newH = p.aspectRatio !== 'original' && p.aspectRatio !== 'custom' 
+        ? calculateHeightFromWidth(w, p.aspectRatio) 
+        : p.fixedHeight
+      return { ...p, fixedWidth: w, fixedHeight: newH }
+    })
+    setZipURL('')
+  }
+
+  const handleAspectRatioChange = (ratio: string) => {
+    setSettings(p => {
+      let newH = p.fixedHeight
+      const newRatio = ratio as AspectRatioPreset
+      if (ratio !== 'original' && ratio !== 'custom') {
+        newH = calculateHeightFromWidth(p.fixedWidth, ratio)
+      }
+      return { ...p, aspectRatio: newRatio, fixedHeight: newH }
+    })
+    setZipURL('')
+  }
 
   const handleFilesChange = async (files: File[]) => {
     if (files.length > 0) {
@@ -125,15 +222,23 @@ const BatchConverter: React.FC<TabComponentProps> = ({
         const blob = await new Promise<Blob | null>((resolve) => {
           const img = new Image()
           img.onload = () => {
+            const { sw, sh, destW, destH } = getConvertedDimensions(
+              img.naturalWidth,
+              img.naturalHeight,
+              settings
+            )
             const canvas = document.createElement('canvas')
-            canvas.width = img.naturalWidth
-            canvas.height = img.naturalHeight
+            canvas.width = destW
+            canvas.height = destH
             const ctx = canvas.getContext('2d')
             if (!ctx) {
               resolve(null)
               return
             }
-            ctx.drawImage(img, 0, 0)
+            
+            const sx = (img.naturalWidth - sw) / 2
+            const sy = (img.naturalHeight - sh) / 2
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, destW, destH)
             
             let mimeType = 'image/webp'
             if (settings.format === 'jpeg') mimeType = 'image/jpeg'
@@ -220,7 +325,16 @@ const BatchConverter: React.FC<TabComponentProps> = ({
                   <div className="file-info">
                     <div className="file-name" style={{ fontWeight: 600 }}>{img.file.name}</div>
                     <div className="file-meta">
-                      {img.width}x{img.height} • {(img.file.size / 1024).toFixed(0)} KB
+                      {(() => {
+                        const { destW, destH } = getConvertedDimensions(img.width, img.height, settings);
+                        const isChanged = img.width !== destW || img.height !== destH;
+                        return isChanged ? (
+                          `${img.width}x${img.height} → ${destW}x${destH}`
+                        ) : (
+                          `${img.width}x${img.height}`
+                        );
+                      })()}
+                      {` • ${(img.file.size / 1024).toFixed(0)} KB`}
                       {img.status === 'processing' && <span style={{ color: 'var(--accent-light)', marginLeft: '10px' }}>⏳ Đang chuyển đổi...</span>}
                       {img.status === 'done' && img.resultSize && (
                         <span style={{ color: '#10b981', marginLeft: '10px', fontWeight: 600 }}>
@@ -267,11 +381,162 @@ const BatchConverter: React.FC<TabComponentProps> = ({
 
         {images.length > 0 && (
           <>
+            {/* Resize Mode Selector */}
             <div className="input-group">
+              <label>Chế độ kích thước</label>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className={`preset-btn ${settings.resizeMode === 'scale' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '0.5rem 0' }}
+                  onClick={() => {
+                    setSettings(p => ({ ...p, resizeMode: 'scale' }))
+                    setZipURL('')
+                  }}
+                  disabled={processing}
+                >
+                  Tỉ lệ (%)
+                </button>
+                <button
+                  type="button"
+                  className={`preset-btn ${settings.resizeMode === 'fixed' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '0.5rem 0' }}
+                  onClick={() => {
+                    setSettings(p => ({ ...p, resizeMode: 'fixed' }))
+                    setZipURL('')
+                  }}
+                  disabled={processing}
+                >
+                  Kích thước cố định (px)
+                </button>
+              </div>
+            </div>
+
+            {settings.resizeMode === 'scale' ? (
+              <>
+                {/* Scale Option */}
+                <div className="input-group" style={{ marginTop: '1rem' }}>
+                  <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Tỉ lệ kích thước (Scale)</span>
+                    <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{settings.scale}%</span>
+                  </label>
+                  <input 
+                    type="range" 
+                    min="10" 
+                    max="100" 
+                    step="5" 
+                    value={settings.scale} 
+                    onChange={(e) => {
+                      setSettings(p => ({ ...p, scale: parseInt(e.target.value) }))
+                      setZipURL('')
+                    }}
+                    disabled={processing}
+                  />
+                </div>
+
+                {/* Aspect Ratio Option */}
+                <div className="input-group" style={{ marginTop: '1rem' }}>
+                  <label>Tỉ lệ khung hình (Aspect Ratio)</label>
+                  <select
+                    value={settings.aspectRatio}
+                    onChange={(e) => {
+                      setSettings(p => ({ ...p, aspectRatio: e.target.value as AspectRatioPreset }))
+                      setZipURL('')
+                    }}
+                    disabled={processing}
+                  >
+                    <option value="original">Giữ nguyên tỉ lệ gốc</option>
+                    <option value="1:1">Vuông (1:1)</option>
+                    <option value="16:9">Ngang (16:9)</option>
+                    <option value="9:16">Dọc (9:16)</option>
+                    <option value="4:3">Cổ điển (4:3)</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Aspect Ratio Selector for Fixed Mode */}
+                <div className="input-group" style={{ marginTop: '1rem' }}>
+                  <label>Tỉ lệ khung hình (Aspect Ratio)</label>
+                  <select
+                    value={settings.aspectRatio === 'original' ? 'custom' : settings.aspectRatio}
+                    onChange={(e) => handleAspectRatioChange(e.target.value)}
+                    disabled={processing}
+                  >
+                    <option value="1:1">Vuông (1:1)</option>
+                    <option value="16:9">Ngang (16:9)</option>
+                    <option value="9:16">Dọc (9:16)</option>
+                    <option value="4:3">Cổ điển (4:3)</option>
+                    <option value="custom">Tự chọn (Tự nhập cả Rộng & Cao)</option>
+                  </select>
+                </div>
+
+                {/* Width & Height inputs */}
+                <div style={{ display: 'flex', gap: '12px', marginTop: '1rem' }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Chiều rộng (px)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={settings.fixedWidth}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1)
+                        handleWidthChange(val)
+                      }}
+                      disabled={processing}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Chiều cao (px)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={settings.fixedHeight}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1)
+                        setSettings(p => ({ ...p, fixedHeight: val }))
+                        setZipURL('')
+                      }}
+                      disabled={processing || (settings.aspectRatio !== 'original' && settings.aspectRatio !== 'custom')}
+                      style={{ 
+                        width: '100%',
+                        opacity: (settings.aspectRatio !== 'original' && settings.aspectRatio !== 'custom') ? 0.6 : 1,
+                        cursor: (settings.aspectRatio !== 'original' && settings.aspectRatio !== 'custom') ? 'not-allowed' : 'auto'
+                      }}
+                      title={(settings.aspectRatio !== 'original' && settings.aspectRatio !== 'custom') ? "Chiều cao tự động tính theo tỉ lệ. Chọn 'Tự chọn' để tự nhập." : ""}
+                    />
+                  </div>
+                </div>
+
+                {/* Fit Mode dropdown */}
+                <div className="input-group" style={{ marginTop: '1rem' }}>
+                  <label>Kiểu khớp kích thước (Fit Mode)</label>
+                  <select
+                    value={settings.fixedFit}
+                    onChange={(e) => {
+                      setSettings(p => ({ ...p, fixedFit: e.target.value as 'crop' | 'stretch' }))
+                      setZipURL('')
+                    }}
+                    disabled={processing}
+                  >
+                    <option value="crop">Cắt ảnh từ tâm (Center Crop - Không méo)</option>
+                    <option value="stretch">Kéo giãn vừa khít (Stretch - Méo ảnh)</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            <div className="input-group" style={{ marginTop: '1rem' }}>
               <label>Định dạng đầu ra (Target Format)</label>
               <select 
                 value={settings.format} 
-                onChange={(e) => setSettings(p => ({ ...p, format: e.target.value as ConvertFormat }))}
+                onChange={(e) => {
+                  setSettings(p => ({ ...p, format: e.target.value as ConvertFormat }))
+                  setZipURL('')
+                }}
                 disabled={processing}
               >
                 <option value="webp">WEBP (Khuyên dùng - Dung lượng nhỏ nhất)</option>
