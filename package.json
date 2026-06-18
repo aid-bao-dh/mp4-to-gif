@@ -1,7 +1,6 @@
 {
   "name": "media-studio-pro",
   "private": true,
-
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -13,10 +12,12 @@
     "@ffmpeg/ffmpeg": "^0.12.6",
     "@ffmpeg/util": "^0.12.1",
     "lucide-react": "^1.8.0",
+    "pica": "^10.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/pica": "^9.0.5",
     "@types/react": "^18.2.14",
     "@types/react-dom": "^18.2.6",
     "@vitejs/plugin-react": "^4.0.1",

@@ -10,6 +10,9 @@ import {
   Files
 } from 'lucide-react'
 import { getImageDimensions } from '../utils/media'
+import Pica from 'pica'
+
+const pica = Pica({ features: ['js', 'wasm', 'ww'] })
 
 interface TabComponentProps {
   ffmpegRef: React.MutableRefObject<any>;
@@ -221,7 +224,7 @@ const BatchConverter: React.FC<TabComponentProps> = ({
         // Vẽ ảnh lên canvas để chuyển đổi định dạng
         const blob = await new Promise<Blob | null>((resolve) => {
           const img = new Image()
-          img.onload = () => {
+          img.onload = async () => {
             const { sw, sh, destW, destH } = getConvertedDimensions(
               img.naturalWidth,
               img.naturalHeight,
@@ -230,21 +233,35 @@ const BatchConverter: React.FC<TabComponentProps> = ({
             const canvas = document.createElement('canvas')
             canvas.width = destW
             canvas.height = destH
-            const ctx = canvas.getContext('2d')
-            if (!ctx) {
-              resolve(null)
-              return
-            }
             
-            const sx = (img.naturalWidth - sw) / 2
-            const sy = (img.naturalHeight - sh) / 2
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, destW, destH)
-            
-            let mimeType = 'image/webp'
-            if (settings.format === 'jpeg') mimeType = 'image/jpeg'
-            else if (settings.format === 'png') mimeType = 'image/png'
+            try {
+              const sx = (img.naturalWidth - sw) / 2
+              const sy = (img.naturalHeight - sh) / 2
+              
+              let sourceElement: HTMLImageElement | HTMLCanvasElement = img
+              
+              const cropCanvas = document.createElement('canvas')
+              cropCanvas.width = sw
+              cropCanvas.height = sh
+              const cropCtx = cropCanvas.getContext('2d')
+              if (cropCtx) {
+                cropCtx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh)
+                sourceElement = cropCanvas
+              }
+              
+              await pica.resize(sourceElement, canvas, {
+                quality: 3
+              })
+              
+              let mimeType = 'image/webp'
+              if (settings.format === 'jpeg') mimeType = 'image/jpeg'
+              else if (settings.format === 'png') mimeType = 'image/png'
 
-            canvas.toBlob((b) => resolve(b), mimeType, settings.quality / 100)
+              canvas.toBlob((b) => resolve(b), mimeType, settings.quality / 100)
+            } catch (err) {
+              console.error(err)
+              resolve(null)
+            }
           }
           img.onerror = () => resolve(null)
           img.src = URL.createObjectURL(item.file)
@@ -422,9 +439,9 @@ const BatchConverter: React.FC<TabComponentProps> = ({
                   </label>
                   <input 
                     type="range" 
-                    min="10" 
+                    min="1" 
                     max="100" 
-                    step="5" 
+                    step="1" 
                     value={settings.scale} 
                     onChange={(e) => {
                       setSettings(p => ({ ...p, scale: parseInt(e.target.value) }))
@@ -553,9 +570,9 @@ const BatchConverter: React.FC<TabComponentProps> = ({
                 </div>
                 <input 
                   type="range" 
-                  min="10" 
+                  min="1" 
                   max="100" 
-                  step="5" 
+                  step="1" 
                   value={settings.quality} 
                   onChange={(e) => setSettings(p => ({ ...p, quality: parseInt(e.target.value) }))}
                   disabled={processing}
